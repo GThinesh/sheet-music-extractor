@@ -37,7 +37,7 @@ def index():
 @app.route("/api/download", methods=["POST"])
 def api_download():
     data = request.get_json(force=True)
-    url = data.get("url", "").strip()
+    url = data.get("url", "").strip().strip('"\'')
     if not url:
         return jsonify({"error": "No URL provided"}), 400
 
