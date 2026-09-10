@@ -1,0 +1,6 @@
+flask>=3.0
+yt-dlp>=2024.0
+opencv-python>=4.9
+imagehash>=4.3
+Pillow>=10.0
+

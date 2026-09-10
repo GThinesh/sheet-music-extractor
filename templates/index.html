@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Music Sheet → PDF Converter</title>
+    <link rel="stylesheet" href="/static/css/style.css?v=8">
+    <!-- Cropper.js CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.css">
+</head>
+<body>
+    <header>
+        <h1>🎵 Music Sheet → PDF Converter</h1>
+        <p class="subtitle">Extract distinct sheet music pages, select or compare pairs, split/crop, and export to A4 PDF.</p>
+    </header>
+
+    <main>
+        <!-- ===== STEP 1: Download ===== -->
+        <section id="step-download" class="step active">
+            <h2><span class="step-num">1</span> Download Video</h2>
+            <div class="step-body">
+                <div class="input-row">
+                    <input type="text" id="url-input"
+                           placeholder="Paste YouTube URL…"
+                           value="https://www.youtube.com/watch?v=_e-zw3Lf-Uw">
+                    <button id="btn-download" class="primary">Download</button>
+                </div>
+                <div id="download-status" class="status"></div>
+            </div>
+        </section>
+
+        <!-- ===== STEP 2: Extract ===== -->
+        <section id="step-extract" class="step" hidden>
+            <h2><span class="step-num">2</span> Extract Frames</h2>
+            <div class="step-body">
+                <p class="section-desc">Sample frames from the video to find all distinct music sheet pages.</p>
+                <div class="extract-controls">
+                    <div class="control-group">
+                        <label for="sample-interval">Sample Every:</label>
+                        <select id="sample-interval">
+                            <option value="5" selected>5 seconds (Recommended ~25-30 frames)</option>
+                            <option value="3">3 seconds (~40-50 frames)</option>
+                            <option value="8">8 seconds (~15-20 frames)</option>
+                            <option value="10">10 seconds (Fewer frames)</option>
+                            <option value="2">2 seconds (Detailed ~60-100 frames)</option>
+                        </select>
+                    </div>
+                    <div class="control-group checkbox-group">
+                        <label>
+                            <input type="checkbox" id="chk-dedup" checked>
+                            Smart filter duplicate frames (skip identical sheets)
+                        </label>
+                    </div>
+                    <button id="btn-extract" class="primary">Extract Frames</button>
+                </div>
+                <div id="extract-status" class="status"></div>
+            </div>
+        </section>
+
+        <!-- ===== STEP 3: Select / Compare Pages ===== -->
+        <section id="step-select" class="step" hidden>
+            <h2>
+                <span class="step-num">3</span> Select Pages
+                <span class="step-mode-switch">
+                    <button id="btn-mode-compare" class="mode-btn active">⇄ Compare 2 Images</button>
+                    <button id="btn-mode-gallery" class="mode-btn">🖼 Gallery View</button>
+                </span>
+            </h2>
+            <div class="step-body">
+                <!-- Pairwise Compare View -->
+                <div id="compare-mode-container">
+                    <div class="compare-header">
+                        <div id="compare-status-text" class="compare-info">Comparing Image 1 vs Image 2</div>
+                        <div class="compare-nav-actions">
+                            <button id="btn-compare-undo" disabled>⮌ Undo</button>
+                            <button id="btn-compare-finish" class="primary">Finish &amp; Proceed →</button>
+                        </div>
+                    </div>
+
+                    <div class="compare-viewport">
+                        <div class="compare-card" id="card-left">
+                            <div class="card-badge" id="badge-left">Image 1 (Reference)</div>
+                            <div class="img-wrapper">
+                                <img id="img-compare-left" src="" alt="Left frame">
+                            </div>
+                        </div>
+                        <div class="compare-card" id="card-right">
+                            <div class="card-badge" id="badge-right">Image 2 (Candidate)</div>
+                            <div class="img-wrapper">
+                                <img id="img-compare-right" src="" alt="Right frame">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="compare-buttons-bar">
+                        <button id="btn-compare-cancel" class="danger big">
+                            ✕ Cancel Candidate (Too similar / Skip)
+                        </button>
+                        <button id="btn-compare-select" class="primary big">
+                            ✓ Select Candidate (New Page)
+                        </button>
+                    </div>
+                    <div class="compare-hint">
+                        💡 <strong>Cancel</strong>: discards Candidate and tests next frame against Reference. <strong>Select</strong>: keeps Candidate as next page and advances.
+                    </div>
+                </div>
+
+                <!-- Gallery View -->
+                <div id="gallery-mode-container" hidden>
+                    <div class="selection-toolbar">
+                        <div class="toolbar-actions">
+                            <button id="btn-select-all">Select All</button>
+                            <button id="btn-deselect-all">Deselect All</button>
+                        </div>
+                        <div class="toolbar-status">
+                            <span id="select-counter" class="counter-badge">0 selected</span>
+                            <button id="btn-proceed-gallery" class="primary">Proceed to Edit &amp; Arrange →</button>
+                        </div>
+                    </div>
+                    <div id="frame-grid" class="frame-grid"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ===== STEP 4: Edit & Arrange ===== -->
+        <section id="step-edit" class="step" hidden>
+            <h2><span class="step-num">4</span> Edit &amp; Arrange Pages</h2>
+            <div class="step-body">
+                <p class="section-desc">Drag items by their handle to change PDF page order. Use <strong>✂ Split Vertical</strong> to cut a 2-column page into left/right halves, or <strong>✁ Crop</strong> to trim margins.</p>
+                <div id="edit-list" class="edit-list"></div>
+                <div class="generate-wrapper">
+                    <button id="btn-generate" class="primary big">Generate A4 PDF ↓</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- ===== STEP 5: Done ===== -->
+        <section id="step-done" class="step" hidden>
+            <h2><span class="step-num">5</span> Completed!</h2>
+            <div class="step-body">
+                <p id="done-msg" class="status ok">✓ Your PDF has been generated and downloaded successfully!</p>
+                <button id="btn-restart">Process Another Video</button>
+            </div>
+        </section>
+    </main>
+
+    <!-- Crop Modal -->
+    <div id="crop-modal" class="modal" hidden>
+        <div class="modal-backdrop"></div>
+        <div class="modal-content">
+            <h3>Crop Image</h3>
+            <div class="crop-container">
+                <img id="crop-image" src="" alt="Crop preview">
+            </div>
+            <div class="modal-actions">
+                <button id="btn-crop-cancel">Cancel</button>
+                <button id="btn-crop-apply" class="primary">Apply Crop</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.js"></script>
+    <script src="/static/js/app.js?v=8"></script>
+</body>
+</html>
