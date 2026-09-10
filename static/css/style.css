@@ -436,6 +436,27 @@ button:disabled {
     display: flex;
     justify-content: flex-end;
 }
+/* ===== PDF page options (Step 4) ===== */
+.pdf-options {
+    display: flex;
+    align-items: center;
+    gap: 1.2rem;
+    flex-wrap: wrap;
+    background: var(--surface2);
+    padding: .9rem 1.2rem;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    margin-bottom: 1.2rem;
+}
+.pdf-options .control-group select {
+    padding: .45rem .8rem;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    font-size: .9rem;
+    outline: none;
+}
 
 /* ===== Hidden override ===== */
 [hidden] { display: none !important; }
@@ -473,6 +494,38 @@ button:disabled {
 }
 .modal-actions {
     display: flex; gap: .5rem; justify-content: flex-end;
+}
+/* ===== Split modal ===== */
+.split-container {
+    position: relative;
+    max-height: 65vh;
+    overflow: hidden;
+    background: #000;
+    border-radius: 6px;
+}
+.split-container img {
+    max-width: min(80vw, 700px);
+    max-height: 60vh;
+    display: block;
+}
+#split-divider {
+    position: absolute;
+    top: 0; bottom: 0;
+    width: 2px;
+    background: var(--accent);
+    box-shadow: 0 0 8px rgba(108,140,255,.9);
+    pointer-events: none;
+    transform: translateX(-1px);
+}
+.split-controls {
+    display: flex;
+    align-items: center;
+    gap: .8rem;
+}
+.split-controls input[type="range"] {
+    flex: 1;
+    accent-color: var(--accent);
+    cursor: pointer;
 }
 
 /* ===== Spinner ===== */

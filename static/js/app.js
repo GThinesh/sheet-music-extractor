@@ -83,13 +83,14 @@ $("#btn-extract").addEventListener("click", async () => {
 
     const interval = parseFloat($("#sample-interval").value) || 5.0;
     const dedup = $("#chk-dedup").checked;
+    const threshold = parseInt($("#dedup-threshold") ? $("#dedup-threshold").value : "7", 10) || 7;
 
     btn.disabled = true;
     showSpinner(statusEl);
-    statusEl.textContent = `Extracting frames every ${interval}s (smart dedup: ${dedup ? "on" : "off"})…`;
+    statusEl.textContent = `Extracting frames every ${interval}s (smart dedup: ${dedup ? "on (threshold " + threshold + ")" : "off"})…`;
 
     try {
-        const res = await api("/api/extract", { interval, dedup });
+        const res = await api("/api/extract", { interval, dedup, threshold });
         const data = await res.json();
         allFrames = data.frames;
         setStatus(statusEl, `✓ Extracted ${data.count} distinct frames for review.`, "ok");
@@ -102,6 +103,12 @@ $("#btn-extract").addEventListener("click", async () => {
     } finally {
         btn.disabled = false;
     }
+});
+
+// Grey out threshold when dedup is off
+$("#chk-dedup").addEventListener("change", (e) => {
+    const sel = $("#dedup-threshold");
+    if (sel) sel.disabled = !e.target.checked;
 });
 
 // ── Step 3: Selection Modes ──────────────────────────────────────────────
@@ -224,16 +231,12 @@ $("#btn-compare-select").addEventListener("click", () => {
         keptIndices.push(curCandIdx);
     }
 
-    // Move to next pair as user requested: "if selected move to image 3 and 4"
-    curRefIdx = curCandIdx + 1;
-    curCandIdx = curCandIdx + 2;
+    // Advance one step: the selected candidate becomes the new reference,
+    // the next frame becomes the new candidate — every frame gets reviewed.
+    curRefIdx = curCandIdx;
+    curCandIdx = curCandIdx + 1;
 
-    // The new refIdx (e.g. Image 3) is a fresh page candidate, keep it
-    if (curRefIdx < allFrames.length && !keptIndices.includes(curRefIdx)) {
-        keptIndices.push(curRefIdx);
-    }
-
-    if (curRefIdx >= allFrames.length || curCandIdx >= allFrames.length) {
+    if (curCandIdx >= allFrames.length) {
         renderComparePair();
         proceedToStep4();
     } else {
@@ -363,7 +366,7 @@ function renderEditList() {
                 <span class="card-seq">Page ${idx + 1} of ${editList.length}</span>
             </div>
             <div class="card-actions">
-                <button class="btn-split" title="Split into left and right halves">✂ Split Vertical</button>
+                <button class="btn-split" title="Split into left and right parts at an adjustable position">✂ Split Vertical</button>
                 <button class="btn-crop" title="Crop margins">✁ Crop</button>
                 <button class="btn-remove danger" title="Remove page">✕ Remove</button>
             </div>
@@ -421,20 +424,58 @@ function onDragEnd(e) {
     dragSrcIdx = null;
 }
 
-// ── Split Vertical ───────────────────────────────────────────────────────
+// ── Split Vertical (adjustable divider) ──────────────────────────────────
 
-async function splitImage(idx) {
+let splitTargetIdx = null;
+
+function splitImage(idx) {
+    openSplitModal(idx);
+}
+
+function openSplitModal(idx) {
+    splitTargetIdx = idx;
     const name = editList[idx];
+    const imgEl = $("#split-image");
+    imgEl.src = `/api/frames/${name}?t=${Date.now()}`;
+    const slider = $("#split-slider");
+    slider.value = "50";
+    updateSplitDivider();
+    show($("#split-modal"));
+}
+
+function updateSplitDivider() {
+    const slider = $("#split-slider");
+    const label = $("#split-value");
+    const divider = $("#split-divider");
+    const pct = parseInt(slider.value, 10) || 50;
+    if (label) label.textContent = `${pct}%`;
+    if (divider) divider.style.left = `${pct}%`;
+}
+
+$("#split-slider").addEventListener("input", updateSplitDivider);
+$("#btn-split-cancel").addEventListener("click", closeSplitModal);
+$("#split-modal .modal-backdrop").addEventListener("click", closeSplitModal);
+
+function closeSplitModal() {
+    hide($("#split-modal"));
+    splitTargetIdx = null;
+}
+
+$("#btn-split-apply").addEventListener("click", async () => {
+    if (splitTargetIdx === null) return;
+    const name = editList[splitTargetIdx];
+    const ratio = (parseInt($("#split-slider").value, 10) || 50) / 100;
     try {
-        const res = await api("/api/split", { filename: name });
+        const res = await api("/api/split", { filename: name, ratio });
         const data = await res.json();
-        // Replace original image with left then right half
-        editList.splice(idx, 1, data.left, data.right);
+        // Replace original image with left then right part
+        editList.splice(splitTargetIdx, 1, data.left, data.right);
+        closeSplitModal();
         renderEditList();
     } catch (e) {
         alert("Split failed: " + e.message);
     }
-}
+});
 
 // ── Crop Modal ───────────────────────────────────────────────────────────
 
@@ -506,15 +547,19 @@ $("#btn-generate").addEventListener("click", async () => {
         return;
     }
 
+    const pageSize = $("#page-size") ? $("#page-size").value : "a4";
+    const orientation = $("#page-orientation") ? $("#page-orientation").value : "portrait";
+
     const btn = $("#btn-generate");
     btn.disabled = true;
-    btn.textContent = "Generating 300 DPI A4 PDF…";
+    const labelFor = (s, o) => `Generating ${s.toUpperCase()} ${o} PDF…`;
+    btn.textContent = labelFor(pageSize, orientation);
 
     try {
         const res = await fetch("/api/generate-pdf", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ images: editList }),
+            body: JSON.stringify({ images: editList, page_size: pageSize, orientation }),
         });
 
         if (!res.ok) {
@@ -526,7 +571,7 @@ $("#btn-generate").addEventListener("click", async () => {
         const blobUrl = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = blobUrl;
-        a.download = "music_sheet.pdf";
+        a.download = `music_sheet_${pageSize}_${orientation}.pdf`;
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -545,7 +590,7 @@ $("#btn-generate").addEventListener("click", async () => {
         alert("PDF error: " + e.message);
     } finally {
         btn.disabled = false;
-        btn.textContent = "Generate A4 PDF ↓";
+        btn.textContent = "Generate PDF ↓";
     }
 });
 

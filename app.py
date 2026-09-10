@@ -10,7 +10,7 @@ from PIL import Image
 
 from downloader import download_video
 from extractor import extract_distinct_frames
-from pdf_builder import build_pdf
+from pdf_builder import PAGE_SIZES_MM, build_pdf
 
 app = Flask(__name__)
 
@@ -70,6 +70,12 @@ def api_extract():
     data = request.get_json(silent=True) or {}
     interval = float(data.get("interval", 5.0))
     dedup = bool(data.get("dedup", True))
+    try:
+        threshold = int(data.get("threshold", 7))
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid threshold (must be an integer 0-64)"}), 400
+    if threshold < 0 or threshold > 64:
+        return jsonify({"error": "Invalid threshold (must be 0-64)"}), 400
 
     try:
         # Clean previous frames
@@ -82,6 +88,7 @@ def api_extract():
             FRAMES_DIR,
             sample_interval_sec=interval,
             dedup=dedup,
+            threshold=threshold,
         )
         state["frames"] = frames
         return jsonify({"ok": True, "count": len(frames), "frames": frames})
@@ -115,8 +122,10 @@ def api_frame_image(name):
 @app.route("/api/split", methods=["POST"])
 def api_split():
     """
-    Split an image vertically (left / right halves).
-    Body: {"filename": "frame_0001.png"}
+    Split an image vertically at an adjustable position.
+    Body: {"filename": "frame_0001.png", "ratio": 0.5}
+      - ratio: float in (0, 1), fraction of width for the left part
+        (backwards compatible: also accepts "position" or "x" in pixels).
     Returns: {"ok": true, "left": "..._left.png", "right": "..._right.png"}
     """
     data = request.get_json(force=True)
@@ -135,16 +144,38 @@ def api_split():
     os.makedirs(EDITED_DIR, exist_ok=True)
     img = Image.open(src_path)
     w, h = img.size
-    mid = w // 2
+
+    # Resolve split position: prefer ratio/position (0..1), fall back to x (px)
+    ratio = data.get("ratio", data.get("position", None))
+    if ratio is None and "x" in data:
+        try:
+            x_px = int(data.get("x"))
+        except (TypeError, ValueError):
+            return jsonify({"error": "Invalid x (must be an integer pixel offset)"}), 400
+        ratio = x_px / w if w else 0.5
+    if ratio is None:
+        ratio = 0.5
+    try:
+        ratio = float(ratio)
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid ratio (must be a number 0-1)"}), 400
+    if not 0.05 <= ratio <= 0.95:
+        return jsonify({"error": "Split position must be between 5% and 95%"}), 400
+    mid = int(round(w * ratio))
+    if mid <= 0 or mid >= w:
+        return jsonify({"error": "Split position out of image bounds"}), 400
 
     base, ext = os.path.splitext(filename)
-    left_name = f"{base}_left{ext}"
-    right_name = f"{base}_right{ext}"
+    # Include ratio in the name so repeated splits at different positions
+    # don't overwrite each other (e.g. frame_0001_left_p50.png).
+    suffix = f"_p{int(round(ratio * 100))}"
+    left_name = f"{base}_left{suffix}{ext}"
+    right_name = f"{base}_right{suffix}{ext}"
 
     img.crop((0, 0, mid, h)).save(os.path.join(EDITED_DIR, left_name))
     img.crop((mid, 0, w, h)).save(os.path.join(EDITED_DIR, right_name))
 
-    return jsonify({"ok": True, "left": left_name, "right": right_name})
+    return jsonify({"ok": True, "left": left_name, "right": right_name, "ratio": ratio})
 
 
 @app.route("/api/crop", methods=["POST"])
@@ -188,12 +219,24 @@ def api_crop():
 def api_generate_pdf():
     """
     Build a PDF from an ordered list of image filenames.
-    Body: {"images": ["frame_0001.png", "frame_0003_left.png", ...]}
+    Body: {
+        "images": ["frame_0001.png", ...],
+        "page_size": "a4" (a5/a4/a3/letter/legal),
+        "orientation": "portrait" (portrait/landscape)
+    }
     """
     data = request.get_json(force=True)
     image_names = data.get("images", [])
     if not image_names:
         return jsonify({"error": "No images provided"}), 400
+
+    page_size = str(data.get("page_size", "a4")).lower()
+    orientation = str(data.get("orientation", "portrait")).lower()
+
+    if page_size not in PAGE_SIZES_MM:
+        return jsonify({"error": f"Invalid page_size '{page_size}'. Choose from: {', '.join(sorted(PAGE_SIZES_MM))}"}), 400
+    if orientation not in ("portrait", "landscape"):
+        return jsonify({"error": f"Invalid orientation '{orientation}'. Choose 'portrait' or 'landscape'."}), 400
 
     # Resolve full paths
     paths = []
@@ -209,13 +252,13 @@ def api_generate_pdf():
         paths.append(found)
 
     try:
-        pdf_bytes = build_pdf(paths)
+        pdf_bytes = build_pdf(paths, page_size=page_size, orientation=orientation)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
     # Save to disk and send
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    pdf_path = os.path.join(OUTPUT_DIR, "music_sheet.pdf")
+    pdf_path = os.path.join(OUTPUT_DIR, f"music_sheet_{page_size}_{orientation}.pdf")
     with open(pdf_path, "wb") as f:
         f.write(pdf_bytes)
 
@@ -223,7 +266,7 @@ def api_generate_pdf():
         pdf_path,
         mimetype="application/pdf",
         as_attachment=True,
-        download_name="music_sheet.pdf",
+        download_name=f"music_sheet_{page_size}_{orientation}.pdf",
     )
 
 
@@ -237,10 +280,11 @@ def api_cleanup():
                 shutil.rmtree(d)
             os.makedirs(d, exist_ok=True)
 
-        # Remove PDF if it exists
-        pdf_path = os.path.join(OUTPUT_DIR, "music_sheet.pdf")
-        if os.path.exists(pdf_path):
-            os.remove(pdf_path)
+        # Remove PDFs if they exist (legacy + per-size names)
+        import glob
+        for pdf_path in glob.glob(os.path.join(OUTPUT_DIR, "music_sheet*.pdf")):
+            if os.path.exists(pdf_path):
+                os.remove(pdf_path)
 
         return jsonify({"ok": True, "message": "Output cleaned up"})
     except Exception as e:

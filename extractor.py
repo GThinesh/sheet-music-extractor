@@ -53,11 +53,16 @@ def extract_distinct_frames(
             break
 
         is_distinct = True
+        cur_hash = None
         if dedup:
             pil_img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
             cur_hash = imagehash.phash(pil_img)
             if prev_hash is not None and (cur_hash - prev_hash) <= threshold:
                 is_distinct = False
+            # Always track the immediate predecessor so slow pans/transitions
+            # don't drift: each sample is compared to the frame right before
+            # it, not to the last *kept* frame.
+            prev_hash = cur_hash
 
         if is_distinct:
             saved_count += 1
@@ -65,9 +70,6 @@ def extract_distinct_frames(
             out_path = os.path.join(output_dir, filename)
 
             cv2.imwrite(out_path, frame, [cv2.IMWRITE_PNG_COMPRESSION, 3])
-
-            if dedup:
-                prev_hash = cur_hash
 
             timestamp = target_pos / fps
             mins = int(timestamp // 60)

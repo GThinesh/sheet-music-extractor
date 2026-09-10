@@ -4,14 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Music Sheet → PDF Converter</title>
-    <link rel="stylesheet" href="/static/css/style.css?v=8">
+    <link rel="stylesheet" href="/static/css/style.css?v=10">
     <!-- Cropper.js CDN -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.css">
 </head>
 <body>
     <header>
         <h1>🎵 Music Sheet → PDF Converter</h1>
-        <p class="subtitle">Extract distinct sheet music pages, select or compare pairs, split/crop, and export to A4 PDF.</p>
+        <p class="subtitle">Extract distinct sheet music pages, select or compare pairs, split/crop, and export to PDF.</p>
     </header>
 
     <main>
@@ -50,6 +50,16 @@
                             <input type="checkbox" id="chk-dedup" checked>
                             Smart filter duplicate frames (skip identical sheets)
                         </label>
+                    </div>
+                    <div class="control-group" id="threshold-group" title="Lower = stricter (keeps more frames). Higher = more aggressive dedup.">
+                        <label for="dedup-threshold">Sensitivity:</label>
+                        <select id="dedup-threshold">
+                            <option value="3">Strict (3)</option>
+                            <option value="5">Medium-strict (5)</option>
+                            <option value="7" selected>Balanced (7)</option>
+                            <option value="10">Aggressive (10)</option>
+                            <option value="14">Very aggressive (14)</option>
+                        </select>
                     </div>
                     <button id="btn-extract" class="primary">Extract Frames</button>
                 </div>
@@ -126,10 +136,29 @@
         <section id="step-edit" class="step" hidden>
             <h2><span class="step-num">4</span> Edit &amp; Arrange Pages</h2>
             <div class="step-body">
-                <p class="section-desc">Drag items by their handle to change PDF page order. Use <strong>✂ Split Vertical</strong> to cut a 2-column page into left/right halves, or <strong>✁ Crop</strong> to trim margins.</p>
+                <p class="section-desc">Drag items by their handle to change PDF page order. Use <strong>✂ Split Vertical</strong> (adjustable cut position) to cut a 2-column page into left/right halves, or <strong>✁ Crop</strong> to trim margins.</p>
                 <div id="edit-list" class="edit-list"></div>
+                <div class="pdf-options">
+                    <div class="control-group">
+                        <label for="page-size">Page Size:</label>
+                        <select id="page-size">
+                            <option value="a5">A5 (148 × 210 mm)</option>
+                            <option value="a4" selected>A4 (210 × 297 mm)</option>
+                            <option value="a3">A3 (297 × 420 mm)</option>
+                            <option value="letter">Letter (8.5 × 11 in)</option>
+                            <option value="legal">Legal (8.5 × 14 in)</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label for="page-orientation">Orientation:</label>
+                        <select id="page-orientation">
+                            <option value="portrait" selected>Portrait (Vertical)</option>
+                            <option value="landscape">Landscape (Horizontal)</option>
+                        </select>
+                    </div>
+                </div>
                 <div class="generate-wrapper">
-                    <button id="btn-generate" class="primary big">Generate A4 PDF ↓</button>
+                    <button id="btn-generate" class="primary big">Generate PDF ↓</button>
                 </div>
             </div>
         </section>
@@ -159,7 +188,28 @@
         </div>
     </div>
 
+    <!-- Split Modal -->
+    <div id="split-modal" class="modal" hidden>
+        <div class="modal-backdrop"></div>
+        <div class="modal-content">
+            <h3>Split Vertical</h3>
+            <p class="section-desc">Drag the slider to position the cut line (avoids cutting through staves).</p>
+            <div class="split-container">
+                <img id="split-image" src="" alt="Split preview">
+                <div id="split-divider"></div>
+            </div>
+            <div class="split-controls">
+                <input type="range" id="split-slider" min="5" max="95" value="50" step="1">
+                <span id="split-value" class="counter-badge">50%</span>
+            </div>
+            <div class="modal-actions">
+                <button id="btn-split-cancel">Cancel</button>
+                <button id="btn-split-apply" class="primary">Apply Split</button>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.js"></script>
-    <script src="/static/js/app.js?v=8"></script>
+    <script src="/static/js/app.js?v=10"></script>
 </body>
 </html>
