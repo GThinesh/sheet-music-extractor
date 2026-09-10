@@ -455,7 +455,8 @@ function openCropModal(idx) {
 
     imgEl.addEventListener("load", function onLoad() {
         imgEl.removeEventListener("load", onLoad);
-        cropper = new Cropper(imgEl, {
+        // @ts-ignore
+        cropper = new window.Cropper(imgEl, {
             viewMode: 1,
             autoCropArea: 1,
             responsive: true,
@@ -533,6 +534,13 @@ $("#btn-generate").addEventListener("click", async () => {
 
         show($("#step-done"));
         $("#step-done").scrollIntoView({ behavior: "smooth" });
+
+        // Ask if user wants to clean up output files
+        setTimeout(() => {
+            if (confirm("PDF generated successfully! Do you want to delete the temporary output files (video, frames, etc.) to save disk space?")) {
+                cleanupOutput();
+            }
+        }, 1000);
     } catch (e) {
         alert("PDF error: " + e.message);
     } finally {

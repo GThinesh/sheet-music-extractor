@@ -227,6 +227,26 @@ def api_generate_pdf():
     )
 
 
+@app.route("/api/cleanup", methods=["POST"])
+def api_cleanup():
+    """Clean up output directories"""
+    try:
+        # Remove and recreate directories to keep them but empty
+        for d in (VIDEO_DIR, FRAMES_DIR, EDITED_DIR):
+            if os.path.exists(d):
+                shutil.rmtree(d)
+            os.makedirs(d, exist_ok=True)
+
+        # Remove PDF if it exists
+        pdf_path = os.path.join(OUTPUT_DIR, "music_sheet.pdf")
+        if os.path.exists(pdf_path):
+            os.remove(pdf_path)
+
+        return jsonify({"ok": True, "message": "Output cleaned up"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
 
