@@ -358,14 +358,18 @@ function renderEditList() {
         card.draggable = true;
         card.dataset.idx = idx;
 
+        const isDeepInk = name.includes("_deepink_");
+        const deepInkBadge = isDeepInk ? `<span class="badge-deepink" title="Variant 1: Deep Ink anti-aliasing applied">✨ Deep Ink</span>` : "";
+
         card.innerHTML = `
             <span class="drag-handle" title="Drag to reorder">⠿</span>
             <img src="/api/frames/${name}?t=${Date.now()}" alt="${name}">
             <div class="card-info">
-                <span class="card-name">${name}</span>
+                <span class="card-name">${name} ${deepInkBadge}</span>
                 <span class="card-seq">Page ${idx + 1} of ${editList.length}</span>
             </div>
             <div class="card-actions">
+                <button class="btn-deep-ink" title="Apply Variant 1: Deep Ink (removes watermark, crisp black notes)">${isDeepInk ? "✨ Re-apply Deep Ink" : "✨ Deep Ink"}</button>
                 <button class="btn-split" title="Split into left and right parts at an adjustable position">✂ Split Vertical</button>
                 <button class="btn-crop" title="Crop margins">✁ Crop</button>
                 <button class="btn-remove danger" title="Remove page">✕ Remove</button>
@@ -377,6 +381,9 @@ function renderEditList() {
         card.addEventListener("dragover",  onDragOver);
         card.addEventListener("drop",      onDrop);
         card.addEventListener("dragend",   onDragEnd);
+
+        // Deep Ink
+        card.querySelector(".btn-deep-ink").addEventListener("click", () => applyDeepInk(idx));
 
         // Split Vertical
         card.querySelector(".btn-split").addEventListener("click", () => splitImage(idx));
@@ -423,6 +430,62 @@ function onDragEnd(e) {
     e.currentTarget.classList.remove("dragging");
     dragSrcIdx = null;
 }
+
+// ── Deep Ink (Variant 1: Anti-Aliasing & Watermark Removal) ───────────────
+
+async function applyDeepInk(idx) {
+    const name = editList[idx];
+    const btn = $$(".edit-card")[idx]?.querySelector(".btn-deep-ink");
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = "Processing…";
+    }
+
+    try {
+        const res = await api("/api/deep-ink", { filename: name, bp: 60.0, wp: 205.0 });
+        const data = await res.json();
+        editList[idx] = data.cleaned;
+        renderEditList();
+    } catch (e) {
+        alert("Deep Ink failed: " + e.message);
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = "✨ Deep Ink";
+        }
+    }
+}
+
+async function applyDeepInkAll() {
+    if (editList.length === 0) {
+        alert("No pages to process.");
+        return;
+    }
+    const btn = $("#btn-deep-ink-all");
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = "Processing all pages…";
+    }
+
+    try {
+        for (let i = 0; i < editList.length; i++) {
+            if (!editList[i].includes("_deepink_")) {
+                const res = await api("/api/deep-ink", { filename: editList[i], bp: 60.0, wp: 205.0 });
+                const data = await res.json();
+                editList[i] = data.cleaned;
+            }
+        }
+        renderEditList();
+    } catch (e) {
+        alert("Deep Ink batch failed: " + e.message);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = "✨ Apply Deep Ink to All";
+        }
+    }
+}
+
+$("#btn-deep-ink-all")?.addEventListener("click", applyDeepInkAll);
 
 // ── Split Vertical (adjustable divider) ──────────────────────────────────
 

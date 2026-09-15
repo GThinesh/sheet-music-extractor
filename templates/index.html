@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Music Sheet → PDF Converter</title>
-    <link rel="stylesheet" href="/static/css/style.css?v=10">
+    <link rel="stylesheet" href="/static/css/style.css?v=11">
     <!-- Cropper.js CDN -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.css">
 </head>
@@ -136,7 +136,10 @@
         <section id="step-edit" class="step" hidden>
             <h2><span class="step-num">4</span> Edit &amp; Arrange Pages</h2>
             <div class="step-body">
-                <p class="section-desc">Drag items by their handle to change PDF page order. Use <strong>✂ Split Vertical</strong> (adjustable cut position) to cut a 2-column page into left/right halves, or <strong>✁ Crop</strong> to trim margins.</p>
+                <div class="edit-toolbar">
+                    <p class="section-desc">Drag items by handle (⠿) to change PDF page order. Use <strong>✨ Deep Ink</strong> on each page to eliminate gray watermarks and crisp up notation, <strong>✂ Split Vertical</strong> to cut pages, or <strong>✁ Crop</strong> to trim margins.</p>
+                    <button id="btn-deep-ink-all" class="secondary" title="Apply Variant 1: Deep Ink anti-aliasing to all pages">✨ Apply Deep Ink to All</button>
+                </div>
                 <div id="edit-list" class="edit-list"></div>
                 <div class="pdf-options">
                     <div class="control-group">
@@ -210,6 +213,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.js"></script>
-    <script src="/static/js/app.js?v=10"></script>
+    <script src="/static/js/app.js?v=11"></script>
 </body>
 </html>

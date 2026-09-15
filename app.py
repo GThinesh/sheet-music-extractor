@@ -213,6 +213,48 @@ def api_crop():
     return jsonify({"ok": True, "cropped": crop_name})
 
 
+@app.route("/api/deep-ink", methods=["POST"])
+def api_deep_ink():
+    """
+    Apply Variant 1: Deep Ink anti-aliasing (two-point levels) to remove gray watermarks
+    and anchor notes/text to solid black.
+    Body: {"filename": "...", "bp": 60.0, "wp": 205.0}
+    Returns: {"ok": true, "cleaned": "..._deepink_xxxxxx.png"}
+    """
+    import cv2
+    import numpy as np
+
+    data = request.get_json(force=True)
+    filename = data.get("filename", "")
+    bp = float(data.get("bp", 60.0))
+    wp = float(data.get("wp", 205.0))
+
+    src_path = None
+    for d in (EDITED_DIR, FRAMES_DIR):
+        p = os.path.join(d, filename)
+        if os.path.isfile(p):
+            src_path = p
+            break
+    if not src_path:
+        return jsonify({"error": "Image not found"}), 404
+
+    os.makedirs(EDITED_DIR, exist_ok=True)
+    gray = cv2.imread(src_path, cv2.IMREAD_GRAYSCALE)
+    if gray is None:
+        return jsonify({"error": "Could not read image"}), 500
+
+    g_float = gray.astype(np.float32)
+    cleaned = np.clip((g_float - bp) / (wp - bp), 0.0, 1.0) * 255.0
+    cleaned = cleaned.astype(np.uint8)
+
+    base, _ = os.path.splitext(filename)
+    clean_name = f"{base}_deepink_{uuid.uuid4().hex[:6]}.png"
+    out_path = os.path.join(EDITED_DIR, clean_name)
+    cv2.imwrite(out_path, cleaned)
+
+    return jsonify({"ok": True, "cleaned": clean_name})
+
+
 # ---------- Step 5: Generate PDF ----------
 
 @app.route("/api/generate-pdf", methods=["POST"])
