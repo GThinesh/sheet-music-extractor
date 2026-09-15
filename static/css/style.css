@@ -432,6 +432,16 @@ button:disabled {
     font-size: .85rem;
     padding: .4rem .8rem;
 }
+.edit-card .card-actions button.btn-restore {
+    background: rgba(255, 193, 7, 0.12);
+    border-color: rgba(255, 193, 7, 0.4);
+    color: #ffc107;
+    font-weight: 600;
+}
+.edit-card .card-actions button.btn-restore:hover:not(:disabled) {
+    background: rgba(255, 193, 7, 0.25);
+    border-color: #ffc107;
+}
 .edit-card .card-actions button.btn-deep-ink {
     background: rgba(108, 140, 255, 0.15);
     border-color: rgba(108, 140, 255, 0.4);
@@ -442,17 +452,29 @@ button:disabled {
     background: rgba(108, 140, 255, 0.3);
     border-color: var(--accent);
 }
-.badge-deepink {
+.badge-tag {
     display: inline-block;
-    background: rgba(81, 207, 102, 0.15);
-    color: var(--success);
     font-size: .75rem;
     font-weight: 600;
     padding: .15rem .5rem;
     border-radius: 4px;
-    border: 1px solid rgba(81, 207, 102, 0.3);
-    margin-left: .5rem;
+    margin-left: .35rem;
     vertical-align: middle;
+}
+.badge-split {
+    background: rgba(255, 152, 0, 0.15);
+    color: #ff9800;
+    border: 1px solid rgba(255, 152, 0, 0.3);
+}
+.badge-crop {
+    background: rgba(156, 39, 176, 0.15);
+    color: #ba68c8;
+    border: 1px solid rgba(156, 39, 176, 0.3);
+}
+.badge-deepink {
+    background: rgba(81, 207, 102, 0.15);
+    color: var(--success);
+    border: 1px solid rgba(81, 207, 102, 0.3);
 }
 .edit-toolbar {
     display: flex;

@@ -326,6 +326,11 @@ $("#btn-proceed-gallery").addEventListener("click", proceedToStep4);
 
 // ── Transition to Step 4 ─────────────────────────────────────────────────
 
+// Helper to extract filename from either a string or item object
+function getItemFilename(item) {
+    return (typeof item === "object" && item && item.filename) ? item.filename : item;
+}
+
 function proceedToStep4() {
     if (keptIndices.length === 0) {
         alert("Please select at least one page.");
@@ -334,7 +339,15 @@ function proceedToStep4() {
 
     // Sort kept indices in order
     const sorted = [...new Set(keptIndices)].sort((a, b) => a - b);
-    editList = sorted.map(i => allFrames[i].filename);
+    editList = sorted.map(i => {
+        const fn = allFrames[i].filename;
+        return {
+            filename: fn,
+            original: fn,
+            splitGroupId: null,
+            splitRole: null,
+        };
+    });
 
     renderEditList();
     show($("#step-edit"));
@@ -352,23 +365,46 @@ function renderEditList() {
         return;
     }
 
-    editList.forEach((name, idx) => {
+    editList.forEach((rawItem, idx) => {
+        const item = (typeof rawItem === "object" && rawItem) ? rawItem : {
+            filename: rawItem,
+            original: rawItem,
+            splitGroupId: null,
+            splitRole: null,
+        };
+        editList[idx] = item;
+
+        const name = item.filename;
         const card = document.createElement("div");
         card.className = "edit-card";
         card.draggable = true;
         card.dataset.idx = idx;
 
         const isDeepInk = name.includes("_deepink_");
-        const deepInkBadge = isDeepInk ? `<span class="badge-deepink" title="Variant 1: Deep Ink anti-aliasing applied">✨ Deep Ink</span>` : "";
+        const isCropped = name.includes("_crop_");
+        const isSplit = item.splitGroupId !== null;
+        const isModified = (item.filename !== item.original) || isSplit;
+
+        let badges = "";
+        if (isSplit) {
+            badges += `<span class="badge-tag badge-split" title="Part of split: ${item.splitRole}">✂ Split (${item.splitRole})</span>`;
+        }
+        if (isCropped) {
+            badges += `<span class="badge-tag badge-crop" title="Cropped">✁ Cropped</span>`;
+        }
+        if (isDeepInk) {
+            badges += `<span class="badge-tag badge-deepink" title="Variant 1: Deep Ink anti-aliasing applied">✨ Deep Ink</span>`;
+        }
 
         card.innerHTML = `
             <span class="drag-handle" title="Drag to reorder">⠿</span>
             <img src="/api/frames/${name}?t=${Date.now()}" alt="${name}">
             <div class="card-info">
-                <span class="card-name">${name} ${deepInkBadge}</span>
+                <span class="card-name">${name} ${badges}</span>
                 <span class="card-seq">Page ${idx + 1} of ${editList.length}</span>
             </div>
             <div class="card-actions">
+                <button class="btn-restore" ${isModified ? "" : "disabled"} title="${isModified ? (isSplit ? "Undo split & restore single original image" : "Restore to original image") : "Image is in original state"}">⮌ Restore Original</button>
                 <button class="btn-deep-ink" title="Apply Variant 1: Deep Ink (removes watermark, crisp black notes)">${isDeepInk ? "✨ Re-apply Deep Ink" : "✨ Deep Ink"}</button>
                 <button class="btn-split" title="Split into left and right parts at an adjustable position">✂ Split Vertical</button>
                 <button class="btn-crop" title="Crop margins">✁ Crop</button>
@@ -381,6 +417,9 @@ function renderEditList() {
         card.addEventListener("dragover",  onDragOver);
         card.addEventListener("drop",      onDrop);
         card.addEventListener("dragend",   onDragEnd);
+
+        // Restore Original
+        card.querySelector(".btn-restore").addEventListener("click", () => restoreOriginal(idx));
 
         // Deep Ink
         card.querySelector(".btn-deep-ink").addEventListener("click", () => applyDeepInk(idx));
@@ -431,10 +470,44 @@ function onDragEnd(e) {
     dragSrcIdx = null;
 }
 
+// ── Restore Original (Undo split / edits) ────────────────────────────────
+
+function restoreOriginal(idx) {
+    const item = editList[idx];
+    if (!item) return;
+
+    if (item.splitGroupId) {
+        const targetGroupId = item.splitGroupId;
+        const originalName = item.original;
+        const updated = [];
+        let restoredInserted = false;
+        for (let i = 0; i < editList.length; i++) {
+            if (editList[i].splitGroupId === targetGroupId) {
+                if (!restoredInserted) {
+                    updated.push({
+                        filename: originalName,
+                        original: originalName,
+                        splitGroupId: null,
+                        splitRole: null,
+                    });
+                    restoredInserted = true;
+                }
+            } else {
+                updated.push(editList[i]);
+            }
+        }
+        editList = updated;
+    } else {
+        item.filename = item.original;
+    }
+    renderEditList();
+}
+
 // ── Deep Ink (Variant 1: Anti-Aliasing & Watermark Removal) ───────────────
 
 async function applyDeepInk(idx) {
-    const name = editList[idx];
+    const item = editList[idx];
+    const name = getItemFilename(item);
     const btn = $$(".edit-card")[idx]?.querySelector(".btn-deep-ink");
     if (btn) {
         btn.disabled = true;
@@ -444,7 +517,16 @@ async function applyDeepInk(idx) {
     try {
         const res = await api("/api/deep-ink", { filename: name, bp: 60.0, wp: 205.0 });
         const data = await res.json();
-        editList[idx] = data.cleaned;
+        if (typeof item === "object" && item) {
+            item.filename = data.cleaned;
+        } else {
+            editList[idx] = {
+                filename: data.cleaned,
+                original: name,
+                splitGroupId: null,
+                splitRole: null,
+            };
+        }
         renderEditList();
     } catch (e) {
         alert("Deep Ink failed: " + e.message);
@@ -468,10 +550,21 @@ async function applyDeepInkAll() {
 
     try {
         for (let i = 0; i < editList.length; i++) {
-            if (!editList[i].includes("_deepink_")) {
-                const res = await api("/api/deep-ink", { filename: editList[i], bp: 60.0, wp: 205.0 });
+            const item = editList[i];
+            const name = getItemFilename(item);
+            if (!name.includes("_deepink_")) {
+                const res = await api("/api/deep-ink", { filename: name, bp: 60.0, wp: 205.0 });
                 const data = await res.json();
-                editList[i] = data.cleaned;
+                if (typeof item === "object" && item) {
+                    item.filename = data.cleaned;
+                } else {
+                    editList[i] = {
+                        filename: data.cleaned,
+                        original: name,
+                        splitGroupId: null,
+                        splitRole: null,
+                    };
+                }
             }
         }
         renderEditList();
@@ -497,7 +590,8 @@ function splitImage(idx) {
 
 function openSplitModal(idx) {
     splitTargetIdx = idx;
-    const name = editList[idx];
+    const item = editList[idx];
+    const name = getItemFilename(item);
     const imgEl = $("#split-image");
     imgEl.src = `/api/frames/${name}?t=${Date.now()}`;
     const slider = $("#split-slider");
@@ -526,13 +620,30 @@ function closeSplitModal() {
 
 $("#btn-split-apply").addEventListener("click", async () => {
     if (splitTargetIdx === null) return;
-    const name = editList[splitTargetIdx];
+    const item = editList[splitTargetIdx];
+    const name = getItemFilename(item);
+    const originalName = (typeof item === "object" && item && item.original) ? item.original : name;
+    const groupId = (typeof item === "object" && item && item.splitGroupId)
+        ? item.splitGroupId
+        : ("split_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5));
     const ratio = (parseInt($("#split-slider").value, 10) || 50) / 100;
     try {
         const res = await api("/api/split", { filename: name, ratio });
         const data = await res.json();
+        const leftItem = {
+            filename: data.left,
+            original: originalName,
+            splitGroupId: groupId,
+            splitRole: "left",
+        };
+        const rightItem = {
+            filename: data.right,
+            original: originalName,
+            splitGroupId: groupId,
+            splitRole: "right",
+        };
         // Replace original image with left then right part
-        editList.splice(splitTargetIdx, 1, data.left, data.right);
+        editList.splice(splitTargetIdx, 1, leftItem, rightItem);
         closeSplitModal();
         renderEditList();
     } catch (e) {
@@ -547,7 +658,8 @@ let cropTargetIdx = null;
 
 function openCropModal(idx) {
     cropTargetIdx = idx;
-    const name = editList[idx];
+    const item = editList[idx];
+    const name = getItemFilename(item);
     const imgEl = $("#crop-image");
     imgEl.src = `/api/frames/${name}?t=${Date.now()}`;
     show($("#crop-modal"));
@@ -583,7 +695,8 @@ function closeCropModal() {
 $("#btn-crop-apply").addEventListener("click", async () => {
     if (!cropper || cropTargetIdx === null) return;
     const cropData = cropper.getData(true);
-    const name = editList[cropTargetIdx];
+    const item = editList[cropTargetIdx];
+    const name = getItemFilename(item);
 
     try {
         const res = await api("/api/crop", {
@@ -594,7 +707,16 @@ $("#btn-crop-apply").addEventListener("click", async () => {
             height: cropData.height,
         });
         const data = await res.json();
-        editList[cropTargetIdx] = data.cropped;
+        if (typeof item === "object" && item) {
+            item.filename = data.cropped;
+        } else {
+            editList[cropTargetIdx] = {
+                filename: data.cropped,
+                original: name,
+                splitGroupId: null,
+                splitRole: null,
+            };
+        }
         closeCropModal();
         renderEditList();
     } catch (e) {
@@ -622,7 +744,11 @@ $("#btn-generate").addEventListener("click", async () => {
         const res = await fetch("/api/generate-pdf", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ images: editList, page_size: pageSize, orientation }),
+            body: JSON.stringify({
+                images: editList.map(it => getItemFilename(it)),
+                page_size: pageSize,
+                orientation: orientation,
+            }),
         });
 
         if (!res.ok) {

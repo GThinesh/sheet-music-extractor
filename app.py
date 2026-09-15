@@ -268,9 +268,11 @@ def api_generate_pdf():
     }
     """
     data = request.get_json(force=True)
-    image_names = data.get("images", [])
-    if not image_names:
+    raw_images = data.get("images", [])
+    if not raw_images:
         return jsonify({"error": "No images provided"}), 400
+
+    image_names = [it["filename"] if isinstance(it, dict) and "filename" in it else str(it) for it in raw_images]
 
     page_size = str(data.get("page_size", "a4")).lower()
     orientation = str(data.get("orientation", "portrait")).lower()
